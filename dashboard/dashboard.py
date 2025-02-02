@@ -1,9 +1,11 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import altair as alt
 import os
 from datetime import datetime
-import plotly.express as px
 
 # Membaca data
 @st.cache_data
@@ -79,6 +81,75 @@ def display_rfm_data(rfm_segmented):
     st.subheader("Hasil Analisis RFM")
     st.dataframe(rfm_segmented)
 
+# Analisis review score
+def display_review_scores(df):
+    if 'review_score' in df.columns:
+        review_scores = df['review_score'].value_counts()
+        most_common_score = review_scores.idxmax()
+
+        # Visualisasi pie chart menggunakan Matplotlib dan Seaborn
+        colors = sns.color_palette("Blues", len(review_scores))
+
+        plt.figure(figsize=(8, 8))
+        plt.pie(
+            review_scores.values,
+            labels=review_scores.index,
+            colors=colors,
+            autopct='%1.1f%%',
+            startangle=90,
+            wedgeprops={'edgecolor': 'white', 'linewidth': 1.5},
+            shadow=True,
+        )
+
+        plt.title("Distribution of Customer Ratings", fontsize=18, fontweight='bold', color='darkblue')
+
+        # Menampilkan pie chart di Streamlit
+        st.pyplot(plt)
+        st.write(f"The most common review score is: **{most_common_score}**")
+    else:
+        st.warning("Kolom 'review_score' tidak ditemukan dalam dataset.")
+
+# Filter dan analisis produk yang paling banyak dijual
+def display_top_selling_products(df):
+    st.sidebar.header("Filter Berdasarkan Tanggal")
+    if 'order_date' in df.columns:
+        start_date = st.sidebar.date_input("Tanggal Mulai", df['order_date'].min())
+        end_date = st.sidebar.date_input("Tanggal Akhir", df['order_date'].max())
+    elif 'order_purchase_timestamp' in df.columns:
+        start_date = st.sidebar.date_input("Tanggal Mulai", df['order_purchase_timestamp'].min())
+        end_date = st.sidebar.date_input("Tanggal Akhir", df['order_purchase_timestamp'].max())
+    else:
+        st.warning("Tidak ada kolom tanggal yang ditemukan dalam dataset.")
+
+    filtered_df = df[(df['order_purchase_timestamp'] >= pd.to_datetime(start_date)) & 
+                     (df['order_purchase_timestamp'] <= pd.to_datetime(end_date))]
+
+    sum_order_items_df = filtered_df.groupby("product_category_name_english")["product_id"].count().reset_index()
+    sum_order_items_df = sum_order_items_df.rename(columns={"product_id": "products"})
+    sum_order_items_df = sum_order_items_df.sort_values(by="products", ascending=False).head(10)  # Top 10 kategori produk
+
+    # Streamlit Title
+    st.title("📊 Analisis Produk yang Paling Banyak Dijual")
+
+    # Tampilkan DataFrame
+    st.subheader("Top 10 Produk Paling Banyak Dijual")
+    st.dataframe(sum_order_items_df)
+
+    # Membuat horizontal bar chart dengan Altair
+    chart = alt.Chart(sum_order_items_df).mark_bar().encode(
+        x=alt.X('products', title='Number of Products'),
+        y=alt.Y('product_category_name_english', sort='-x', title='Product Category'),
+        color=alt.Color('product_category_name_english', legend=None),
+        tooltip=['product_category_name_english', 'products']
+    ).properties(
+        title='Kategori produk paling banyak dijual',
+        width=600,
+        height=400
+    )
+
+    # Display chart di Streamlit
+    st.altair_chart(chart, use_container_width=True)
+
 # Main execution
 def main():
     # Menghitung RFM metrics
@@ -118,3 +189,7 @@ if segment_filter != 'All':
 else:
     st.subheader("Data untuk Semua Segmen")
     st.dataframe(rfm_results)
+
+# Menampilkan review score dan produk paling banyak dijual
+display_review_scores(df)
+display_top_selling_products(df)
